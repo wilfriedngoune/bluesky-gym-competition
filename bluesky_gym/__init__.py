@@ -51,4 +51,10 @@ def register_envs():
         id="CompetitionEnv-v0",
         entry_point="bluesky_gym.envs.competition_env:CompetitionEnv",
     )
+
+    #SingleAgentEnv where one agent is controlled
+    register(
+        id="SingleAgentEnv-v0",
+        entry_point="bluesky_gym.envs.single_agent_env:SingleAgentEnv",
+    )
     
