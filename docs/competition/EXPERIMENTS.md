@@ -7,6 +7,9 @@ use `python` for readability.
 The [initial baseline report](BASELINE_RESULTS.md) records the first measured
 comparison of the student's saved model against straight flight.
 
+The [curriculum guide](CURRICULUM.md) explains progressive training stages,
+advancement targets and automatic evaluation on the full development distribution.
+
 ## Evaluate the existing baseline
 
 ```powershell

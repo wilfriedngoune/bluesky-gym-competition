@@ -24,6 +24,8 @@ SOURCE_FILES = (
     "train_single_agent.py", "scripts/evaluate_competition.py",
     "scripts/evaluate_single_agent.py", "scripts/experiment_support.py",
     "scripts/replay_single_agent.py", "bluesky_gym/envs/single_agent_env.py",
+    "scripts/curriculum.py", "scripts/train_curriculum.py",
+    "scripts/evaluate_curriculum_stage.py",
     "bluesky_gym/envs/competition_env.py", "bluesky_gym/__init__.py",
     "bluesky_gym/envs/common/functions.py", "core/rendering.py",
     "core/scenario.py", "core/observations.py", "core/actions.py", "core/tools.py",
@@ -89,10 +91,9 @@ def provenance(run_dir):
     }
 
 
-def validate_environment(env):
-    """Fail early if this evaluation no longer uses the competition world."""
+def validate_world(env):
+    """Preserve dynamics, scoring, timing and the full observation capacities."""
     from bluesky_gym.envs.competition_env import CompetitionEnv
-    from core.scenario import ScenarioGenerator
 
     base = env.unwrapped
     for key, expected in FIXED_CONFIG.items():
@@ -101,6 +102,14 @@ def validate_environment(env):
     for method in ("_update_metrics", "_get_info", "step"):
         if getattr(type(base), method) is not getattr(CompetitionEnv, method):
             raise ValueError(f"Competition evaluation must preserve {method}")
+
+
+def validate_environment(env):
+    """Fail early if evaluation no longer uses the original competition world."""
+    from core.scenario import ScenarioGenerator
+
+    validate_world(env)
+    base = env.unwrapped
     if base._fixed_scenario is not None or type(base.scenario_generator) is not ScenarioGenerator:
         raise ValueError("Evaluation must use the original random scenario generator")
 
