@@ -43,43 +43,6 @@ class SingleAgentEnv(CompetitionEnv):
 
         return obs, info
 
-    # OBSERVATION
-    def _get_obs(self, ac_id):
-
-        inside_sector = not self._outside_sector
-
-        obs = {
-            # Goal position
-            **self.waypoint_obs.observe(
-                ac_id,
-                [self.goal_lat],
-                [self.goal_lon]
-            ),
-
-            # Own speed
-            **self.airspeed_obs.observe(ac_id),
-
-            # Dynamic obstacles: aircraft
-            **self.intruder_obs.observe(ac_id),
-
-            # Static obstacles
-            **self.obstacle_obs.observe(
-                ac_id,
-                self.obstacle_centre_lat,
-                self.obstacle_centre_lon,
-                self.obstacle_radius
-            ),
-
-            # Sector boundary
-            **self.sector_obs.observe(
-                ac_id,
-                self.scenario.sector,
-                inside_sector
-            ),
-        }
-
-        return obs
-
     # ACTION
     def _get_action(self, ac_id, action):
 

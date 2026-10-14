@@ -5,5 +5,7 @@ TODO.txt
 images/
 logs/
 models/
+results/single_agent/
+.cache/tests/
 dist/
 

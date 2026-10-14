@@ -45,7 +45,8 @@ METRIC_KEYS = [
 def make_env(kind, n_agents=N_AGENTS_MA):
     """Return the environment to evaluate.
 
-    Default = the base competition env. Swap in your own subclass or wrapper
+    Single-agent uses our SingleAgentEnv; multi-agent keeps the base env.
+    Swap in your own subclass or wrapper
     stack here, e.g. ``return MyObsWrapper(gym.make("CompetitionEnv-v0"))``.
     Do NOT change the fixed scoring params (intrusion_distance, episode_time_limit,
     distance_margin, n_intruders/n_agents, n_obstacles, ...).
@@ -54,7 +55,14 @@ def make_env(kind, n_agents=N_AGENTS_MA):
         import gymnasium as gym
         import bluesky_gym
         bluesky_gym.register_envs()
-        return gym.make("CompetitionEnv-v0")
+        from scripts.experiment_support import validate_environment
+        env = gym.make("SingleAgentEnv-v0")
+        try:
+            validate_environment(env)
+        except Exception:
+            env.close()
+            raise
+        return env
     from bluesky_zoo.competition_v0 import CompetitionZooEnv
     return CompetitionZooEnv(n_agents=n_agents)
 
@@ -70,7 +78,11 @@ def load_policy(kind, model_path=None):
         return lambda obs: model.predict(obs, deterministic=True)[0]
     """
     if model_path is not None:
-        raise NotImplementedError("load your trained policy in load_policy()")
+        if kind != "sa":
+            raise ValueError("This loader supports single-agent PPO only; configure a multi-agent loader separately.")
+        from stable_baselines3 import PPO
+        model = PPO.load(model_path, device="cpu")
+        return lambda obs: model.predict(obs, deterministic=True)[0]
     return lambda obs: np.zeros(2, dtype=np.float32)
 # =============================================================================
 

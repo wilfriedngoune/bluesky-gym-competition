@@ -139,7 +139,11 @@ that also modifies the observation function.
 
 ### Train on the single-agent track
 
-There is no bundled single-agent trainer, because SB3 handles it directly. The
+This checkout includes `train_single_agent.py` and tracked evaluation tools. See
+[Reproducible experiments](EXPERIMENTS.md) for training, checkpoint comparisons,
+failure replay, and official reporting commands.
+
+SB3 also handles the single-agent environment directly. The
 observation is a `Dict`, so either use `MultiInputPolicy`, or flatten it and use
 `MlpPolicy`:
 
