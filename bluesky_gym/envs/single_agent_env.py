@@ -39,6 +39,15 @@ class SingleAgentEnv(CompetitionEnv):
         self.min_target_speed = 120.0
         self.max_target_speed = 220.0
 
+        # Restricted-area safety buffer in NM
+        self.restricted_buffer_nm = 3.0
+
+        # Hysteresis avoids oscillating exactly at the buffer boundary
+        self.restricted_buffer_release_nm = 4.0
+
+        # Currently avoided obstacle
+        self.active_buffer_obstacle = None
+
         # =====================================================
         # Continuous action space
         # =====================================================
@@ -200,6 +209,7 @@ class SingleAgentEnv(CompetitionEnv):
 
         self.previous_escape_clearance = None
         self.was_inside_restricted = False
+        self.active_buffer_obstacle = None  
 
         obs, info = super().reset(
             seed=seed,
@@ -500,6 +510,41 @@ class SingleAgentEnv(CompetitionEnv):
         )
 
         return states
+    
+    def _get_buffer_avoidance_heading(
+            self,
+            own_idx,
+            obstacle_state,
+        ):
+            """
+            Return a heading that moves the aircraft away from the nearest
+            restricted-area boundary point.
+            """
+
+            boundary_point = obstacle_state[
+                "nearest_point"
+            ]
+
+            qdr_to_boundary, _ = kwikqdrdist(
+                bs.traf.lat[own_idx],
+                bs.traf.lon[own_idx],
+                boundary_point[0],
+                boundary_point[1],
+            )
+
+            if obstacle_state["inside"]:
+                # When inside, fly through the nearest boundary
+                # and continue outward.
+                escape_heading = qdr_to_boundary
+
+            else:
+                # When outside but inside the safety buffer,
+                # move away from the boundary.
+                escape_heading = self._wrap_angle(
+                    qdr_to_boundary + 180.0
+                )
+
+            return escape_heading
 
     # =========================================================
     # SECTOR STATE
@@ -821,78 +866,156 @@ class SingleAgentEnv(CompetitionEnv):
     # =========================================================
 
     def _get_navigation_reference(
-        self,
-        own_idx,
-    ):
-
-        obstacle_states = (
-            self._get_obstacle_states(
-                own_idx
-            )
-        )
-
-        # Restricted area has local priority.
-        for obstacle in (
-            obstacle_states
+            self,
+            own_idx,
         ):
 
-            if obstacle["inside"]:
+            obstacle_states = (
+                self._get_obstacle_states(
+                    own_idx
+                )
+            )
+
+            # ---------------------------------------------------------
+            # 1. Aircraft is physically inside a restricted area
+            # ---------------------------------------------------------
+
+            for obstacle in obstacle_states:
+
+                if obstacle["inside"]:
+
+                    self.active_buffer_obstacle = (
+                        obstacle["index"]
+                    )
+
+                    heading = (
+                        self._get_buffer_avoidance_heading(
+                            own_idx,
+                            obstacle,
+                        )
+                    )
+
+                    return (
+                        heading,
+                        1,
+                    )
+
+            # ---------------------------------------------------------
+            # 2. Keep avoiding the current obstacle until enough
+            #    clearance has been recovered
+            # ---------------------------------------------------------
+
+            if (
+                self.active_buffer_obstacle
+                is not None
+            ):
+
+                active_obstacle = None
+
+                for obstacle in obstacle_states:
+
+                    if (
+                        obstacle["index"]
+                        == self.active_buffer_obstacle
+                    ):
+
+                        active_obstacle = obstacle
+                        break
+
+                if (
+                    active_obstacle is not None
+                    and active_obstacle["clearance"]
+                    < self.restricted_buffer_release_nm
+                ):
+
+                    heading = (
+                        self._get_buffer_avoidance_heading(
+                            own_idx,
+                            active_obstacle,
+                        )
+                    )
+
+                    return (
+                        heading,
+                        1,
+                    )
+
+                self.active_buffer_obstacle = None
+
+            # ---------------------------------------------------------
+            # 3. Enter safety-buffer avoidance mode
+            # ---------------------------------------------------------
+
+            nearest_obstacle = min(
+                obstacle_states,
+                key=lambda item:
+                    item["clearance"]
+            )
+
+            if (
+                nearest_obstacle["clearance"]
+                < self.restricted_buffer_nm
+            ):
+
+                self.active_buffer_obstacle = (
+                    nearest_obstacle["index"]
+                )
+
+                heading = (
+                    self._get_buffer_avoidance_heading(
+                        own_idx,
+                        nearest_obstacle,
+                    )
+                )
+
+                return (
+                    heading,
+                    1,
+                )
+
+            # ---------------------------------------------------------
+            # 4. Return to sector if necessary
+            # ---------------------------------------------------------
+
+            sector_state = (
+                self._get_sector_state(
+                    own_idx
+                )
+            )
+
+            if not sector_state["inside"]:
 
                 qdr, _ = kwikqdrdist(
                     bs.traf.lat[own_idx],
                     bs.traf.lon[own_idx],
-                    obstacle[
+                    sector_state[
                         "nearest_point"
                     ][0],
-                    obstacle[
+                    sector_state[
                         "nearest_point"
                     ][1],
                 )
 
                 return (
                     qdr,
-                    1,
+                    2,
                 )
 
-        sector_state = (
-            self._get_sector_state(
-                own_idx
-            )
-        )
+            # ---------------------------------------------------------
+            # 5. Normal mode: navigate toward goal
+            # ---------------------------------------------------------
 
-        # If outside the sector, return inside.
-        if not sector_state["inside"]:
-
-            qdr, _ = kwikqdrdist(
-                bs.traf.lat[own_idx],
-                bs.traf.lon[own_idx],
-                sector_state[
-                    "nearest_point"
-                ][0],
-                sector_state[
-                    "nearest_point"
-                ][1],
-            )
-
-            return (
-                qdr,
-                2,
-            )
-
-        # Normal mode: fly toward the goal.
-        goal_heading, _ = (
-            kwikqdrdist(
+            goal_heading, _ = kwikqdrdist(
                 bs.traf.lat[own_idx],
                 bs.traf.lon[own_idx],
                 self.goal_lat,
                 self.goal_lon,
             )
-        )
 
-        return (
-            goal_heading,
-            0,
-        )
+            return (
+                goal_heading,
+                0,
+            )
 
     # =========================================================
     # OBSERVATION
@@ -1400,6 +1523,7 @@ class SingleAgentEnv(CompetitionEnv):
         )
 
         # Penalize getting close before entering.
+            # Soft penalty when approaching a restricted area.
         if (
             not inside_restricted
             and nearest_clearance < 8.0
@@ -1412,8 +1536,27 @@ class SingleAgentEnv(CompetitionEnv):
             )
 
             reward -= (
-                0.15
+                0.10
                 * risk
+                * elapsed_time
+            )
+
+        # Stronger penalty inside the safety buffer.
+        if (
+            not inside_restricted
+            and nearest_clearance
+            < self.restricted_buffer_nm
+        ):
+
+            buffer_risk = (
+                1.0
+                - nearest_clearance
+                / self.restricted_buffer_nm
+            )
+
+            reward -= (
+                0.75
+                * buffer_risk
                 * elapsed_time
             )
 
