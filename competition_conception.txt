@@ -1,0 +1,6 @@
+1- The agent was flying and make circles
+# The action space have been change to continue actino space, to give the agent more possible values
+
+2- The agent was flying inside the restrcted zone and was staying in there for long time
+# As flag to precise if the agent is inside or outside of a partuicular restricted zone was defined.
+# This tp simply means, if the agent is inside the restricted area, his goal is to get out of it.
