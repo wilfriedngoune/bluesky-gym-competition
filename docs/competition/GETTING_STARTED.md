@@ -63,43 +63,52 @@ python test_zoo.py
 
 ## 3. The example training script — [`train_zoo.py`](../../train_zoo.py)
 
-`train_zoo.py` is a **simple but functional** learning setup for the
-multi-agent environment. It is a *learnability sanity check* (checks if the mean per-agent
-return before vs. after training is better), not a tuned solution. A potential starting point
-to build on.
+`train_zoo.py` trains one shared PPO policy across the multi-agent environment.
+It defaults to the **navigation MDP**, which reuses the observation, reward and
+heading/speed action mapping from `SingleAgentEnv`. See the
+**[multi-agent pipeline guide](MULTI_AGENT_PIPELINE.md)** for the checked rules,
+warm-start details and complete training/evaluation/reel workflow.
 
 ```bash
-python train_zoo.py 250000            # train, save to ppo_competition.zip
-python train_zoo.py replay            # load it and render a greedy rollout
+python train_zoo.py train 250000      # save multi_agent_model.zip and run metadata
+python train_zoo.py replay            # render the shared navigation policy
+
+# Start from a compatible existing single-agent checkpoint.
+python train_zoo.py train 1000000 --init-model single_agent_model.zip
+
+# Explicitly select the original competition MDP instead.
+python train_zoo.py train 250000 --mdp base --model ppo_competition_base
 ```
 
-**Algorithm.** Stable-Baselines3 `PPO` with an `MlpPolicy`, using **parameter
-sharing** — one shared policy drives all 10 (homogeneous) agents.
+**Algorithm.** Stable-Baselines3 `PPO` with a `MultiInputPolicy`, using
+**parameter sharing**: one shared policy drives all 10 homogeneous agents.
+The navigation MDP keeps the same Dict keys and feature shapes as the
+single-agent policy, so compatible SA weights can initialize MA training.
 
-**Necessary wrappers** (in `make_vec_env`) turns the PettingZoo `ParallelEnv`
-into something SB3 can train on (virtually changing it to a single-agent environment):
-
-1. `FlattenObs` — flattens each agent's `Dict` observation into a 1-D `Box`
-   (SuperSuit's `flatten_v0` only handles `Box`, not `Dict`), so a plain
-   `MlpPolicy` works.
-2. `black_death_v3` — keeps terminated agents (zero-padded) in the batch until
-   the episode ends.
-3. `pettingzoo_env_to_vec_env_v1` — exposes the N agents as an N-way vectorized
-   env backed by a **single** underlying `ParallelEnv`.
-4. `SB3VecEnvWrapper` + `VecMonitor` — adapt to the SB3 VecEnv API and record
-   per-episode returns.
+**SB3 adapter.** `SharedPolicyVecEnv` in `bluesky_zoo/sb3_vec_env.py` exposes
+the agents as vector slots backed by one PettingZoo `ParallelEnv`. It keeps
+Dict observations, final metrics, terminal observations and time-limit flags.
+Aircraft that arrive early use absorbing slots until the shared scenario ends;
+the training CSV records each aircraft's real final metrics once.
 
 **Why a single underlying env matters:** BlueSky is a **process-global
 singleton** — only one BlueSky-backed environment can be active per process.
-That is why the script uses `pettingzoo_env_to_vec_env_v1` (one env, N agent
-views) and **not** `concat_vec_envs_v1` (which would create multiple envs pointing to the same BlueSky instance).
+Run evaluation in a separate command after training. Avoid callbacks that
+interleave another BlueSky environment in the training process.
 
-**Hyperparameters** (deliberately modest): `n_steps=512`, `batch_size=128`,
+**Default hyperparameters:** `n_steps=1024`, `batch_size=256`,
 `gamma=0.99`, `gae_lambda=0.95`, `learning_rate=3e-4`, `ent_coef=0.0`,
-`net_arch=[64, 64]`. Tune away.
+separate policy/value MLPs `[256, 256]`, and initial log standard deviation `-0.5`.
+CLI flags control rollout size, seed, checkpoint frequency and device.
 
-> `N_AGENTS` is set to the competition value of 10; lower it for faster local
-> iteration, but report/evaluate at 10.
+After training, the script now saves a totals report and runs a separate
+1000-scenario evaluation by default. Use `--eval-episodes 20` for a short
+nonofficial check or `--eval-episodes 0` to skip it. Markdown/JSON reports contain
+the sharing-template totals and goal/clean-flight rates; see the pipeline guide
+for output filenames and metric definitions.
+
+> Training timesteps count agent slots, including absorbing slots after arrival.
+> `--n-agents` can lower traffic for training, but report/evaluate at 10.
 
 ---
 
@@ -201,12 +210,17 @@ python -m scripts.evaluate_competition --env sa
 python -m scripts.evaluate_competition --env ma                
 
 # quick check + your trained policy (see load_policy in the script)
-python -m scripts.evaluate_competition --env sa --episodes 20
+python -m scripts.evaluate_competition --env ma --mdp navigation --model multi_agent_model --episodes 20
+
+# official report protocol for the trained navigation policy
+python -m scripts.evaluate_competition --env ma --mdp navigation --model multi_agent_model
 
 # record GIFs (docs images, or your 5-scenario submission reel)
 python -m scripts.record_competition_gifs                        # both doc GIFs
-python -m scripts.record_competition_gifs --env sa --seeds 1 2 3 4 5 --out reel.gif
+python -m scripts.record_competition_gifs --env ma --mdp navigation --model multi_agent_model --seeds 1 2 3 4 5 --out reel.gif
 ```
 
-Both scripts have two clearly-marked edit points (an env builder and a
-model/policy loader). Plug in your subclass and trained model there.
+Evaluation and GIF scripts default to the original `--mdp base` demo. Select
+`--mdp navigation` to match training's default MDP, and pass the PPO checkpoint
+with `--model`. Mismatched checkpoint spaces fail clearly. The recording budget
+covers a complete episode unless `--max-steps` sets an explicit shorter cap.

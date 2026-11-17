@@ -25,6 +25,15 @@ a single-agent and a multi-agent environment.
   change, what is fixed, the metrics, and how you are scored.
 - **[Getting started guide](docs/competition/GETTING_STARTED.md)** — install, run
   the demo scripts, understand `train_zoo.py`, and customize the MDP.
+- **[Multi-agent navigation pipeline](docs/competition/MULTI_AGENT_PIPELINE.md)** —
+  transfer the single-agent PPO policy, train with shared weights, evaluate the
+  competition metrics, and record a submission reel.
+- **[Change overview and reward experiment](docs/competition/CHANGE_OVERVIEW.md)** —
+  implemented changes, benefits/tradeoffs, and commands for the revised MA reward.
+
+- **[Lookahead and shrinking zones](docs/competition/LOOKAHEAD_AND_ZONE.md)** —
+  optional v5 policy/value-guided search, aircraft-local goal zones, rules checks,
+  and training/evaluation commands.
 
 ## Submission & logistics
 

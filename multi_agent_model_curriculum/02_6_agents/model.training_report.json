@@ -1,0 +1,35 @@
+{
+  "reports": [
+    {
+      "kind": "ma",
+      "phase": "training",
+      "seed": 2,
+      "mdp": "navigation-v3",
+      "model_path": "D:\\Software-Entwicklung\\bluesky-gym-competition\\multi_agent_model_curriculum\\02_6_agents\\model",
+      "source": "D:\\Software-Entwicklung\\bluesky-gym-competition\\multi_agent_model_curriculum\\02_6_agents\\training_metrics.csv",
+      "n_agents": 6,
+      "n_scenarios": null,
+      "completed_training_scenarios": 73,
+      "partial_training_scenarios": 1,
+      "aircraft_records": 440,
+      "official_protocol": false,
+      "totals": {
+        "waypoint_reached": 313.0,
+        "intrusion_events": 228.0,
+        "intrusion_time": 36448.0,
+        "restricted_area_events": 53.0,
+        "time_in_restricted_area": 3397.0,
+        "sector_exit_events": 107.0,
+        "time_outside_sector": 3417.0,
+        "flight_time": 973580.0,
+        "violation-free": 238,
+        "violation-free_success": 172
+      },
+      "rates": {
+        "goal_completion_pct": 71.13636363636364,
+        "violation_free_pct": 54.09090909090909,
+        "violation_free_success_pct": 39.09090909090909
+      }
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "reports": [
+    {
+      "kind": "ma",
+      "phase": "evaluation",
+      "seed": 42,
+      "mdp": "navigation-v3",
+      "model_path": "multi_agent_model.zip",
+      "source": "multi_agent_model.eval100.csv",
+      "n_agents": 10,
+      "n_scenarios": 100,
+      "completed_training_scenarios": null,
+      "partial_training_scenarios": null,
+      "aircraft_records": 1000,
+      "official_protocol": false,
+      "totals": {
+        "waypoint_reached": 722.0,
+        "intrusion_events": 1132.0,
+        "intrusion_time": 224106.0,
+        "restricted_area_events": 207.0,
+        "time_in_restricted_area": 14375.0,
+        "sector_exit_events": 107.0,
+        "time_outside_sector": 6766.0,
+        "flight_time": 2065213.0,
+        "violation-free": 385,
+        "violation-free_success": 296
+      },
+      "rates": {
+        "goal_completion_pct": 72.2,
+        "violation_free_pct": 38.5,
+        "violation_free_success_pct": 29.6
+      }
+    }
+  ]
+}
