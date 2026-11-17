@@ -262,7 +262,7 @@ def train(
 
 def play(
     model_path=MODEL_PATH,
-    n_episodes=10,
+    n_episodes=1000,
 ):
 
     model = PPO.load(
@@ -275,6 +275,8 @@ def play(
     )
 
     raw_env = env.unwrapped
+
+    episode_records = []
 
     for episode in range(
         n_episodes
@@ -337,7 +339,61 @@ def play(
             f"{info}\n"
         )
 
+        episode_records.append(
+            dict(info)
+        )
+
     env.close()
+
+    # =========================================================
+    # SUMMARY
+    # =========================================================
+
+    metric_keys = [
+        "waypoint_reached",
+        "flight_time",
+        "intrusion_events",
+        "intrusion_time",
+        "restricted_area_events",
+        "time_in_restricted_area",
+        "sector_exit_events",
+        "time_outside_sector",
+    ]
+
+    print("\n")
+    print("=" * 56)
+    print(
+        f"EVALUATION SUMMARY "
+        f"OVER {n_episodes} EPISODES"
+    )
+    print("=" * 56)
+
+    print(
+        f"{'Metric':<32}"
+        f"{'Total':>20}"
+    )
+
+    print("-" * 56)
+
+    for key in metric_keys:
+
+        total_value = sum(
+            float(
+                record.get(
+                    key,
+                    0.0
+                )
+            )
+            for record
+            in episode_records
+        )
+
+        print(
+            f"{key:<32}"
+            f"{int(round(total_value)):>20}"
+        )
+
+    print("=" * 56)
 
 
 if __name__ == "__main__":
