@@ -9,6 +9,42 @@ Built on [BlueSky](https://github.com/TUDelft-CNS-ATM/bluesky) and The Farama Fo
 
 For a complete list of the currently available environments click [here](bluesky_gym/envs/README.md)
 
+## 🏆 RL Competition
+
+This repository hosts an **air traffic control RL competition** organized by the TU Delft and [AI4REALNET](https://ai4realnet.eu/): 
+Guide aircraft to their goals while avoiding conflicts, restricted areas, and sector exits in
+a single-agent and a multi-agent environment.
+
+<p align="center">
+    <img src="docs/media/competition/single_agent.gif" width="25%">
+    <img src="docs/media/competition/multi_agent.gif" width="25%"><br/>
+    <em>Left: single-agent competition env. Right: multi-agent competition env (neutral policy shown).</em>
+</p>
+
+- **[Competition outline & rules](docs/competition/COMPETITION.md)** — what you may
+  change, what is fixed, the metrics, and how you are scored.
+- **[Getting started guide](docs/competition/GETTING_STARTED.md)** — install, run
+  the demo scripts, understand `train_zoo.py`, and customize the MDP.
+- **[Multi-agent navigation pipeline](docs/competition/MULTI_AGENT_PIPELINE.md)** —
+  transfer the single-agent PPO policy, train with shared weights, evaluate the
+  competition metrics, and record a submission reel.
+- **[Change overview and reward experiment](docs/competition/CHANGE_OVERVIEW.md)** —
+  implemented changes, benefits/tradeoffs, and commands for the revised MA reward.
+
+- **[Lookahead and shrinking zones](docs/competition/LOOKAHEAD_AND_ZONE.md)** —
+  optional v5 policy/value-guided search, aircraft-local goal zones, rules checks,
+  and training/evaluation commands.
+
+## Submission & logistics
+
+- **Registration** Fill in this [form](https://docs.google.com/forms/d/e/1FAIpQLSf1fAvrqL4DiNEgy2Q2FqvpXCvjDhMMJ4fvAJTnOo0YH-SRQw/viewform?usp=publish-editor)
+- **Deadline:** 30th of November 2026
+- **How to submit:** Submit a technical report including metrics and video(s) of the trained policy to the email below, your latest submission will be graded
+- **Team size:** No limit
+- **Prizes:** Prize money depending on funding, will be updated once known
+- **Eligibility:** Everyone
+- **Questions / contact:** Join our [Discord](https://discord.gg/hD8NXjPf8k) or email: d.j.groot@tudelft.nl
+
 ## Installation
 
 `pip install bluesky-gym`

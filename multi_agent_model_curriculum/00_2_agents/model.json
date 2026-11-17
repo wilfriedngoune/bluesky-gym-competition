@@ -1,0 +1,116 @@
+{
+  "mdp": "navigation-v3",
+  "n_agents": 2,
+  "n_obstacles": 5,
+  "seed": 0,
+  "requested_timesteps": 250000,
+  "actual_timesteps": 251904,
+  "timestep_unit": "agent slots, including absorbing slots",
+  "mask_inactive": true,
+  "centralized_critic": true,
+  "action_config": {
+    "heading_deadband_deg": 0.0,
+    "speed_deadband_kt": 0.0
+  },
+  "passage_config": null,
+  "passage_training_probability": 0.0,
+  "active_timesteps": 215343,
+  "absorbing_timesteps": 36561,
+  "init_model": null,
+  "n_steps": 1024,
+  "batch_size": 256,
+  "n_epochs": 10,
+  "learning_rate": 0.0003,
+  "gamma": 0.998,
+  "gae_lambda": 0.95,
+  "policy_kwargs": {
+    "net_arch": {
+      "pi": [
+        256,
+        256
+      ],
+      "vf": [
+        256,
+        256
+      ]
+    },
+    "log_std_init": -0.5,
+    "global_key": "centralized_state"
+  },
+  "reward_config": {
+    "gamma": 0.998,
+    "goal_bonus": 20.0,
+    "progress_weight": 10.0,
+    "distance_scale_km": 100.0,
+    "intrusion_event_cost": 5.0,
+    "intrusion_second_cost": 0.1,
+    "restricted_event_cost": 5.0,
+    "restricted_second_cost": 0.05,
+    "sector_event_cost": 5.0,
+    "sector_second_cost": 0.05,
+    "conflict_risk_second_cost": 0.05,
+    "conflict_horizon_seconds": 180.0,
+    "conflict_buffer_nm": 8.0,
+    "flight_second_cost": 0.002,
+    "action_change_cost": 0.005,
+    "sector_buffer_second_cost": 0.0,
+    "sector_buffer_nm": 5.0
+  },
+  "observation_shapes": {
+    "centralized_state": [
+      120
+    ],
+    "goal_direction": [
+      2
+    ],
+    "goal_distance": [
+      1
+    ],
+    "intruder_mask": [
+      9
+    ],
+    "intruders": [
+      9,
+      7
+    ],
+    "navigation_mode": [
+      1
+    ],
+    "obstacles": [
+      5,
+      7
+    ],
+    "own_speed": [
+      1
+    ],
+    "previous_action": [
+      2
+    ],
+    "remaining_time": [
+      1
+    ],
+    "sector": [
+      4
+    ]
+  },
+  "action_frequency": 5,
+  "metrics_path": "D:\\Software-Entwicklung\\bluesky-gym-competition\\multi_agent_model_curriculum\\00_2_agents\\training_metrics.csv",
+  "device": "cpu",
+  "torch_threads": 1,
+  "versions": {
+    "torch": "2.14.1",
+    "stable-baselines3": "2.9.0",
+    "gymnasium": "1.4.0",
+    "pettingzoo": "1.27.0",
+    "bluesky-simulator": "1.1.1"
+  },
+  "reports": {
+    "training_report": "D:\\Software-Entwicklung\\bluesky-gym-competition\\multi_agent_model_curriculum\\00_2_agents\\model.training_report.md",
+    "evaluation_csv": null,
+    "evaluation_report": null,
+    "evaluation_episodes": 0,
+    "evaluation_seed": 42,
+    "evaluation_n_agents": 10,
+    "evaluation_status": "skipped"
+  }
+}

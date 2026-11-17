@@ -1,0 +1,49 @@
+{
+  "mdp": "navigation-v3",
+  "status": "complete",
+  "requested_total_timesteps": 1000000,
+  "stages": [
+    {
+      "n_agents": 2,
+      "requested_timesteps": 250000,
+      "seed": 0,
+      "model": "D:\\Software-Entwicklung\\bluesky-gym-competition\\multi_agent_model_curriculum\\00_2_agents\\model",
+      "metrics": "D:\\Software-Entwicklung\\bluesky-gym-competition\\multi_agent_model_curriculum\\00_2_agents\\training_metrics.csv",
+      "init_model": null,
+      "status": "complete",
+      "actual_timesteps": 251904
+    },
+    {
+      "n_agents": 4,
+      "requested_timesteps": 250000,
+      "seed": 1,
+      "model": "D:\\Software-Entwicklung\\bluesky-gym-competition\\multi_agent_model_curriculum\\01_4_agents\\model",
+      "metrics": "D:\\Software-Entwicklung\\bluesky-gym-competition\\multi_agent_model_curriculum\\01_4_agents\\training_metrics.csv",
+      "init_model": "D:\\Software-Entwicklung\\bluesky-gym-competition\\multi_agent_model_curriculum\\00_2_agents\\model.zip",
+      "status": "complete",
+      "actual_timesteps": 253952
+    },
+    {
+      "n_agents": 6,
+      "requested_timesteps": 250000,
+      "seed": 2,
+      "model": "D:\\Software-Entwicklung\\bluesky-gym-competition\\multi_agent_model_curriculum\\02_6_agents\\model",
+      "metrics": "D:\\Software-Entwicklung\\bluesky-gym-competition\\multi_agent_model_curriculum\\02_6_agents\\training_metrics.csv",
+      "init_model": "D:\\Software-Entwicklung\\bluesky-gym-competition\\multi_agent_model_curriculum\\01_4_agents\\model.zip",
+      "status": "complete",
+      "actual_timesteps": 251904
+    },
+    {
+      "n_agents": 10,
+      "requested_timesteps": 250000,
+      "seed": 3,
+      "model": "D:\\Software-Entwicklung\\bluesky-gym-competition\\multi_agent_model",
+      "metrics": "D:\\Software-Entwicklung\\bluesky-gym-competition\\multi_agent_training_metrics.csv",
+      "init_model": "D:\\Software-Entwicklung\\bluesky-gym-competition\\multi_agent_model_curriculum\\02_6_agents\\model.zip",
+      "status": "complete",
+      "actual_timesteps": 256000
+    }
+  ],
+  "note": "Stage weights transfer with fresh optimizers; rollout budgets may overshoot.",
+  "actual_total_timesteps": 1013760
+}
