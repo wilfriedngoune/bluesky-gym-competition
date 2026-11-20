@@ -8,7 +8,7 @@ import numpy as np
 from bluesky.tools.misc import txt2hdg
 
 from bluesky_gym.envs.common import functions as fn
-from bluesky_gym.envs.single_agent_env import SingleAgentEnv
+from bluesky_gym.envs.common.navigation import NavigationMDP
 from bluesky_zoo.multi_agent_env import MultiAgentEnv
 from core.scenario import AgentSpec, Obstacle, Scenario
 from core.tools import kwikqdrdist
@@ -39,12 +39,13 @@ class MultiAgentNavigationTests(unittest.TestCase):
         self.addCleanup(env.close)
         return env
 
-    def test_spaces_match_single_agent_and_intruder_slots_stay_fixed(self):
-        # BlueSky is process-global: create/close these environments sequentially.
-        single = SingleAgentEnv(n_obstacles=5)
-        observation_space = single.observation_space
-        action_space = single.action_space
-        single.close()
+    def test_legacy_contract_and_intruder_slots_stay_fixed(self):
+        # Current SingleAgentEnv has evolved independently. Freeze the legacy
+        # MA contract against its mixin; cross-host parity belongs to the new MDP.
+        legacy = NavigationMDP()
+        legacy._init_navigation(5)
+        observation_space = legacy.observation_space
+        action_space = legacy.action_space
 
         env = self.make_env(n_agents=8, n_obstacles=5)
         observations, _ = env.reset(seed=12)

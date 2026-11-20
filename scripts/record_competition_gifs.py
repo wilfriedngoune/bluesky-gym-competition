@@ -38,7 +38,8 @@ import numpy as np                                  # noqa: E402
 from PIL import Image                               # noqa: E402
 
 from scripts.evaluate_competition import (           # noqa: E402
-    actions_for_agents, load_policy, make_env, validate_policy_spaces, policy_reward_kwargs,
+    actions_for_agents, action_for_single_agent, configure_lookahead,
+    load_policy, make_env, validate_policy_spaces, policy_reward_kwargs,
 )
 
 
@@ -82,7 +83,7 @@ def rollout_single_agent(seed, act=None, max_steps=None, mdp="base"):
         terminated = truncated = False
         steps = 0
         while not (terminated or truncated) and steps < step_limit:
-            action = np.zeros(2, dtype=np.float32) if act is None else act(obs)
+            action = action_for_single_agent(act, obs, env)
             obs, _, terminated, truncated, _ = env.step(action)
             frames.append(env.render())
             steps += 1
@@ -132,7 +133,12 @@ def record(env_kind, seeds, out_path, n_agents=10, model_path=None,
            mdp="base", max_steps=None, no_lookahead=None, **gif_kwargs):
     """Record one or more scenarios (concatenated) into a single GIF."""
     act = policy_from_model(model_path, kind=env_kind, mdp=mdp)
-    if act is not None and no_lookahead is not None:
+    if mdp == "navigation-transfer":
+        if act is None and no_lookahead is False:
+            raise ValueError("Lookahead requires a learned RL checkpoint; pass --model")
+        if act is not None:
+            configure_lookahead(act,env_kind,mdp,no_lookahead=no_lookahead)
+    elif act is not None and no_lookahead is not None:
         act.disable_lookahead = no_lookahead
     seeds = list(seeds)
     if not seeds:
@@ -168,7 +174,7 @@ def main():
     parser.add_argument("--out", default=None, help="output GIF path (single --env only)")
     parser.add_argument("--model", default=None,
                         help="path to a trained model (see policy_from_model)")
-    parser.add_argument("--mdp", choices=["base", "navigation", "navigation-v2", "navigation-v3", "navigation-v4", "navigation-v5"], default="base",
+    parser.add_argument("--mdp", choices=["base", "navigation", "navigation-v2", "navigation-v3", "navigation-v4", "navigation-v5", "navigation-transfer"], default="base",
                         help="observation/reward/action design used to train the model")
     parser.add_argument("--max-steps", type=int, default=None,
                         help="optional decision-step cap per scenario (default: full episode budget)")
@@ -176,7 +182,7 @@ def main():
     inference.add_argument("--no-lookahead", dest="no_lookahead", action="store_true", default=None,
                            help="record actor only; default follows checkpoint")
     inference.add_argument("--with-lookahead", dest="no_lookahead", action="store_false",
-                           help="explicitly enable v5 lookahead")
+                           help="enable v5 or single-agent navigation-transfer lookahead")
     args = parser.parse_args()
     if args.max_steps is not None and args.max_steps < 1:
         parser.error("--max-steps must be positive")

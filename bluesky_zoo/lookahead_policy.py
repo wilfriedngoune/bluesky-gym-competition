@@ -90,11 +90,14 @@ class ForecastScene:
 class LookaheadPolicy:
     """A bounded PUCT search for each live aircraft, from one common snapshot."""
 
+    checkpoint_mdp = "navigation-v5"
+    traffic_slots = 9
+
     def __init__(self, model, env, config):
         if "centralized_state" in model.observation_space.spaces:
             raise ValueError("v5 lookahead currently requires a decentralized policy/value checkpoint")
-        if getattr(model, "competition_mdp", None) != "navigation-v5":
-            raise ValueError("Lookahead requires a learned navigation-v5 checkpoint")
+        if getattr(model, "competition_mdp", None) != self.checkpoint_mdp:
+            raise ValueError(f"Lookahead requires a learned {self.checkpoint_mdp} checkpoint")
         if not math.isclose(config.discount, model.gamma, rel_tol=0, abs_tol=1e-12):
             raise ValueError("Lookahead discount must match the learned PPO discount")
         self.model, self.env, self.config = model, env, config
@@ -265,9 +268,9 @@ class LookaheadPolicy:
             ]
             intruders.append(((separation >= self.env.intrusion_distance, urgency), features))
         intruders.sort(key=lambda row: row[0])
-        traffic = np.zeros((9, 7))
-        mask = np.zeros(9)
-        for slot, (_, features) in enumerate(intruders[:9]):
+        traffic = np.zeros((self.traffic_slots, 7))
+        mask = np.zeros(self.traffic_slots)
+        for slot, (_, features) in enumerate(intruders[:self.traffic_slots]):
             traffic[slot], mask[slot] = features, 1
         _, mode, _ = self._reference(aircraft)
         obstacles = np.array([row for _, row in obstacle_rows]).reshape((-1, 7))

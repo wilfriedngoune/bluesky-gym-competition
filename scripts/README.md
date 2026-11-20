@@ -39,3 +39,22 @@ The navigation v6 experiment tools are now available:
 
 See [the v6 experiment guide](../docs/competition/NAVIGATION_V6_EXPERIMENTS.md) for
 separate output paths, PPO refinement, commands and experimental limitations.
+
+The opt-in `navigation-transfer` MDP shares SA/MA deadline features, ten masked traffic
+slots, clearance rays, configurable reward diagnostics and obstacle-side memory.
+It requires new compatible models and initially uses actor-only inference.
+Use `python -m scripts.train_transfer_navigation --env sa|ma --model <new-path>`;
+see [SA/MA feature transfer](../docs/competition/SA_MA_TRANSFER.md) for training,
+checkpoint transfer, replay, evaluation, compatibility and limitations.
+
+For a trained single-agent shared-contract checkpoint, enable PPO-guided lookahead
+without retraining:
+
+```powershell
+.\.venv312\Scripts\python.exe -m scripts.evaluate_competition --env sa --mdp navigation-transfer --model models/navigation_transfer_sa/model.zip --episodes 20 --with-lookahead --out models/navigation_transfer_sa/model.lookahead.evaluation.csv
+```
+
+Use `--no-lookahead` and a separate output path for its actor-only comparison.
+Defaults remain actor only for `navigation-transfer`; explicit SA search supports
+the existing `--lookahead-preset fast`, `--lookahead-simulations` and
+`--lookahead-depth` options. Transfer MA search is not supported.

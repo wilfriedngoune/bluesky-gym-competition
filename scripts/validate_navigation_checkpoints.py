@@ -76,8 +76,13 @@ def render_summary(summary):
 
 
 def validate_checkpoints(models, *, out_dir, seeds=(101, 102), episodes=3,
-                         n_agents=10, disable_lookahead=None, progress=True):
+                         n_agents=10, disable_lookahead=None, progress=True, kind="ma", mdp="navigation-v5"):
     """Run standard scoring in separate validation seed streams without learning."""
+    if kind not in ("sa", "ma"):
+        raise ValueError("Validation kind must be sa or ma")
+    if mdp == "navigation-transfer" and kind != "sa" and disable_lookahead is False:
+        raise ValueError("Multi-agent navigation-transfer remains actor-only")
+    effective_agents = 1 if kind == "sa" else n_agents
     paths = [Path(path).resolve() for path in models]
     seeds = list(seeds)
     if not paths or len(paths) != len(set(paths)):
@@ -96,8 +101,8 @@ def validate_checkpoints(models, *, out_dir, seeds=(101, 102), episodes=3,
     # A new run directory owns all output names and protects earlier results.
     output.mkdir(parents=True, exist_ok=False)
     started = time.perf_counter()
-    summary = dict(phase="validation", official_protocol=False, mdp="navigation-v5",
-                   seeds=seeds, episodes_per_seed=episodes, n_agents=n_agents,
+    summary = dict(phase="validation", official_protocol=False, mdp=mdp, environment_kind=kind,
+                   seeds=seeds, episodes_per_seed=episodes, n_agents=effective_agents,
                    inference_override=("saved" if disable_lookahead is None else
                                        "actor_only" if disable_lookahead else "with_lookahead"),
                    completed=False, models=[])
@@ -105,21 +110,20 @@ def validate_checkpoints(models, *, out_dir, seeds=(101, 102), episodes=3,
     try:
         for model_index, path in enumerate(paths):
             digest = hashlib.sha256(path.read_bytes()).hexdigest()
-            act = evaluation.load_policy("ma", str(path), mdp="navigation-v5")
-            if disable_lookahead is not None:
-                act.disable_lookahead = disable_lookahead
+            act = evaluation.load_policy(kind, str(path), mdp=mdp)
+            evaluation.configure_lookahead(act,kind,mdp,no_lookahead=disable_lookahead)
             item = dict(model=str(path), model_sha256=digest,
                         lookahead_enabled=not getattr(act, "disable_lookahead", False),
-                        lookahead_config=asdict(act.lookahead_config),
-                        saved_environment_settings=evaluation.policy_reward_kwargs(act, "navigation-v5"),
+                        lookahead_config=asdict(act.lookahead_config) if getattr(act, "lookahead_config", None) is not None else None,
+                        saved_environment_settings=evaluation.policy_reward_kwargs(act, mdp),
                         seeds=[])
             summary["models"].append(item)
             combined = []
             for seed in seeds:
                 beginning = time.perf_counter()
-                records = evaluation.run_multi_agent(episodes, act, n_agents,
-                    mdp="navigation-v5", progress=progress, seed=seed)
-                if len(records) != episodes * n_agents:
+                records = (evaluation.run_multi_agent(episodes, act, n_agents, mdp=mdp, progress=progress, seed=seed)
+                           if kind == "ma" else evaluation.run_single_agent(episodes, act, mdp=mdp, progress=progress, seed=seed))
+                if len(records) != episodes * effective_agents:
                     raise RuntimeError("Validation did not return one final record per aircraft episode")
                 name = f"{model_index:02d}_{path.stem}_seed{seed}"
                 evaluation.write_csv(records, str(output / (name + ".csv")))
@@ -130,7 +134,7 @@ def validate_checkpoints(models, *, out_dir, seeds=(101, 102), episodes=3,
                 combined.extend(records)
                 _write_json(output / (name + ".json"), dict(
                     phase="validation", official_protocol=False, model=str(path), model_sha256=digest,
-                    n_agents=n_agents, n_scenarios=episodes, lookahead_enabled=item["lookahead_enabled"],
+                    n_agents=effective_agents, environment_kind=kind, mdp=mdp, n_scenarios=episodes, lookahead_enabled=item["lookahead_enabled"],
                     lookahead_config=item["lookahead_config"], **seed_result))
             if hashlib.sha256(path.read_bytes()).hexdigest() != digest:
                 raise RuntimeError("Checkpoint changed during validation; comparison is incomplete")
@@ -158,11 +162,13 @@ def main(argv=None):
     mode.add_argument("--no-lookahead", dest="disable_lookahead", action="store_true")
     mode.add_argument("--with-lookahead", dest="disable_lookahead", action="store_false")
     parser.set_defaults(disable_lookahead=None)
+    parser.add_argument("--env", choices=["sa", "ma"], default="ma")
+    parser.add_argument("--mdp", choices=["base", "navigation", "navigation-v2", "navigation-v3", "navigation-v4", "navigation-v5", "navigation-transfer"], default="navigation-v5")
     args = parser.parse_args(argv)
     models = args.models or sorted(Path(args.checkpoint_dir).glob(args.pattern))
     validate_checkpoints(models, out_dir=args.out_dir, seeds=args.seeds,
                          episodes=args.episodes, n_agents=args.n_agents,
-                         disable_lookahead=args.disable_lookahead)
+                         disable_lookahead=args.disable_lookahead, kind=args.env, mdp=args.mdp)
 
 
 if __name__ == "__main__":

@@ -2,8 +2,8 @@
 
 ``MultiAgentEnv`` retains CompetitionZooEnv's scenarios, simulation, termination
 and objective scoring. All policy observations, actions and shaped rewards come
-from the same NavigationMDP as SingleAgentEnv, allowing a single PPO policy to be
-shared and initialized from a compatible single-agent checkpoint.
+from the legacy NavigationMDP. Current SingleAgentEnv has evolved separately;
+new cross-host training uses the explicit navigation-transfer contract.
 """
 
 from bluesky_gym.envs.common.navigation import NavigationMDP
@@ -59,7 +59,7 @@ class MultiAgentEnv(CompetitionZooEnv):
     """PettingZoo ParallelEnv with the single-agent navigation policy contract.
 
     Observation keys, normalization, five intruder slots, absolute heading and
-    speed actions and reward shaping match SingleAgentEnv. Action history,
+    speed actions and reward shaping retain the legacy contract. Action history,
     progress and restricted-area hysteresis belong to individual aircraft in
     ``navigation_states``. Use the same ``n_obstacles`` as a transferred model.
     """

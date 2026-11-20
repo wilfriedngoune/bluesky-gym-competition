@@ -51,13 +51,25 @@ METRIC_KEYS = [
 
 
 def make_env(kind, n_agents=N_AGENTS_MA, mdp="base", render_mode=None, reward_config=None, action_config=None,
-             passage_config=None, zone_config=None, decision_seconds=None):
+             passage_config=None, zone_config=None, decision_seconds=None, transfer_config=None):
     """Return the environment to evaluate.
 
     Default = the base competition env; navigation selects the custom MDP.
     Do NOT change the fixed scoring params (intrusion_distance, episode_time_limit,
     distance_margin, n_intruders/n_agents, n_obstacles, ...).
     """
+    if mdp == "navigation-transfer":
+        if kind not in {"sa", "ma"}:
+            raise ValueError(f"unknown environment kind: {kind!r}")
+        from bluesky_zoo.transfer_navigation import SingleAgentTransferEnv, MultiAgentTransferEnv
+        options = dict(render_mode=render_mode, reward_config=reward_config, action_config=action_config,
+                       passage_config=passage_config, zone_config=zone_config, transfer_config=transfer_config)
+        if decision_seconds is not None:
+            options["action_frequency"] = resolve_decision_seconds(mdp, override=decision_seconds)
+        return (SingleAgentTransferEnv(**options) if kind == "sa" else
+                MultiAgentTransferEnv(n_agents=n_agents, **options))
+    if transfer_config is not None:
+        raise ValueError("Transfer configuration requires --mdp navigation-transfer")
     if kind not in {"sa", "ma"}:
         raise ValueError(f"unknown environment kind: {kind!r}")
     if mdp not in {"base", "navigation", "navigation-v2", "navigation-v3", "navigation-v4", "navigation-v5"}:
@@ -133,11 +145,66 @@ def load_policy(kind, model_path=None, mdp="base"):
     # mix-up fails with an actionable message instead of a shape error mid-run.
     act.model = model
     act.disable_lookahead = bool(getattr(model, "competition_disable_lookahead", False))
-    if mdp == "navigation-v5":
+    if mdp == "navigation-transfer":
+        act.disable_lookahead = True
+    if mdp == "navigation-v5" or (mdp == "navigation-transfer" and kind == "sa"):
         from bluesky_zoo.lookahead import LookaheadConfig
         saved = getattr(model, "competition_lookahead_config", None)
         act.lookahead_config = LookaheadConfig(**saved) if saved is not None else LookaheadConfig(discount=model.gamma)
     return act
+
+
+def action_for_single_agent(act, observation, env):
+    """Use the SA copied-state predictor only when search is explicitly enabled."""
+    config = getattr(act, "lookahead_config", None)
+    if config is None or getattr(act, "disable_lookahead", False):
+        return np.zeros(2, dtype=np.float32) if act is None else act(observation)
+    from bluesky_zoo.single_agent_lookahead import SingleAgentLookaheadPolicy
+    raw_env = getattr(env, "unwrapped", env)
+    planner = getattr(act, "lookahead_planner", None)
+    if planner is None or planner.env is not raw_env or planner.config != config:
+        planner = SingleAgentLookaheadPolicy(act.model, raw_env, config)
+        act.lookahead_planner = planner
+    planner.observer = getattr(act, "search_observer", None)
+    return planner.action(observation)
+
+
+def configure_lookahead(act, kind, mdp, *, no_lookahead=None, lookahead_preset="saved",
+                        lookahead_simulations=None, lookahead_depth=None, lookahead_passes=None):
+    """Resolve explicit inference overrides without changing checkpoint defaults."""
+    overridden = (lookahead_preset not in (None, "saved")
+                  or any(value is not None for value in
+                         (lookahead_simulations, lookahead_depth, lookahead_passes)))
+    if no_lookahead is None:
+        no_lookahead = bool(getattr(act, "disable_lookahead", mdp == "navigation-transfer")) and not overridden
+    supported = mdp == "navigation-v5" or (mdp == "navigation-transfer" and kind == "sa")
+    if mdp == "navigation-transfer" and kind != "sa" and not no_lookahead:
+        raise ValueError("Multi-agent navigation-transfer remains actor-only; use --env sa for transfer lookahead")
+    if overridden and (not supported or no_lookahead):
+        raise ValueError("Lookahead settings require navigation-v5 or single-agent navigation-transfer with lookahead enabled")
+    if supported:
+        saved = getattr(act, "lookahead_config", None)
+        if saved is None and not no_lookahead:
+            from bluesky_zoo.lookahead import LookaheadConfig
+            model = getattr(act, "model", None)
+            if model is None:
+                raise ValueError("Lookahead requires a learned RL checkpoint; pass --model")
+            saved = LookaheadConfig(discount=model.gamma)
+        if saved is not None:
+            act.lookahead_config = resolve_inference_lookahead_config(
+                saved, preset=lookahead_preset, simulations=lookahead_simulations,
+                max_depth=lookahead_depth, coordination_passes=lookahead_passes)
+            if mdp == "navigation-transfer" and not no_lookahead:
+                if act.lookahead_config.safety_filter:
+                    raise ValueError("Single-agent transfer lookahead does not support the optional separation filter")
+                if act.lookahead_config.coordination_passes != 1:
+                    raise ValueError("Single-agent transfer lookahead uses one search pass")
+        if overridden:
+            print(f"Evaluation lookahead override: {act.lookahead_config.simulations} simulations, "
+                  f"depth {act.lookahead_config.max_depth}, {act.lookahead_config.coordination_passes} pass(es). "
+                  "Behavior may differ from the saved search setup.")
+    act.disable_lookahead = no_lookahead
+    return no_lookahead
 
 
 def actions_for_agents(act, observations, agents, env=None):
@@ -191,6 +258,7 @@ def validate_policy_spaces(act, env, kind, mdp):
             "Use the MDP used for training; navigation-v3 needs its nine-slot/mask/time inputs. "
             "navigation-v4 additionally needs clearance rays and its saved heading/buffer profile. "
             "navigation-v5 also needs shrinking-zone inputs and its saved search/zone profile. "
+            "navigation-transfer needs the shared ten-slot/deadline/memory inputs; older models cannot load directly. "
             "Flattened base-policy checkpoints need their original observation wrapper. "
             f"{error}"
         ) from error
@@ -212,7 +280,7 @@ def _evaluation_progress(completed, total, started):
           end="\n" if completed == total else "\r", flush=True)
 
 
-def run_single_agent(n_episodes, act, mdp="base", progress=False):
+def run_single_agent(n_episodes, act, mdp="base", progress=False, seed=SEED):
     """One record (final info dict) per episode."""
     env = make_env("sa", mdp=mdp, **policy_reward_kwargs(act, mdp))
     records = []
@@ -220,10 +288,10 @@ def run_single_agent(n_episodes, act, mdp="base", progress=False):
         validate_policy_spaces(act, env, "sa", mdp)
         started = time.perf_counter()
         for ep in range(n_episodes):
-            obs, info = env.reset(seed=SEED if ep == 0 else None)
+            obs, info = env.reset(seed=seed if ep == 0 else None)
             terminated = truncated = False
             while not (terminated or truncated):
-                obs, _, terminated, truncated, info = env.step(act(obs))
+                obs, _, terminated, truncated, info = env.step(action_for_single_agent(act, obs, env))
             records.append(dict(info))
             if progress:
                 _evaluation_progress(ep + 1, n_episodes, started)
@@ -262,6 +330,15 @@ def policy_reward_kwargs(act, mdp):
     model = getattr(act, "model", None)
     saved_actions = getattr(model, "competition_action_config", None)
     kwargs = {"action_config": saved_actions} if saved_actions is not None else {}
+    if mdp == "navigation-transfer":
+        kwargs["transfer_config"] = getattr(model, "competition_transfer_config", None)
+        kwargs["passage_config"] = getattr(model, "competition_passage_config", None)
+        kwargs["zone_config"] = getattr(model, "competition_zone_config", None)
+        saved_reward = getattr(model, "competition_reward_config", None)
+        if saved_reward is not None:
+            kwargs["reward_config"] = saved_reward
+            if saved_reward["gamma"] != model.gamma:
+                raise ValueError("Checkpoint reward discount differs from PPO gamma")
     saved_seconds = getattr(model, "competition_decision_seconds", None)
     if saved_seconds is not None:
         kwargs["decision_seconds"] = resolve_decision_seconds(mdp, saved=saved_seconds)
@@ -338,21 +415,10 @@ def evaluate(kind, n_episodes, n_agents, model_path, out_path, mdp="base", no_lo
               f"{N_EPISODES} scenarios and {'10 agents' if kind == 'ma' else 'the default SA configuration'}.")
     evaluation_started = time.perf_counter()
     act = load_policy(kind, model_path, mdp=mdp)
-    search_overridden = (lookahead_preset not in (None, "saved")
-                         or any(value is not None for value in
-                                (lookahead_simulations, lookahead_depth, lookahead_passes)))
-    if no_lookahead is None:
-        no_lookahead = bool(getattr(act, "disable_lookahead", False)) and not search_overridden
-    if search_overridden and (mdp != "navigation-v5" or no_lookahead):
-        raise ValueError("Lookahead settings require navigation-v5 with lookahead enabled")
-    if mdp == "navigation-v5":
-        act.lookahead_config = resolve_inference_lookahead_config(
-            act.lookahead_config, preset=lookahead_preset, simulations=lookahead_simulations,
-            max_depth=lookahead_depth, coordination_passes=lookahead_passes)
-        if search_overridden:
-            print(f"Evaluation lookahead override: {act.lookahead_config.simulations} simulations, "
-                  f"depth {act.lookahead_config.max_depth}, {act.lookahead_config.coordination_passes} pass(es). "
-                  "Behavior may differ from the saved search setup.")
+    no_lookahead = configure_lookahead(
+        act, kind, mdp, no_lookahead=no_lookahead, lookahead_preset=lookahead_preset,
+        lookahead_simulations=lookahead_simulations, lookahead_depth=lookahead_depth,
+        lookahead_passes=lookahead_passes)
     safety_options = {"safety_filter": safety_filter, "safety_buffer_nm": safety_buffer_nm,
                       "safety_horizon_seconds": safety_horizon_seconds}
     if any(value is not None for value in safety_options.values()):
@@ -375,16 +441,17 @@ def evaluate(kind, n_episodes, n_agents, model_path, out_path, mdp="base", no_lo
     suffix = "" if mdp == "base" else f"_{mdp}"
     csv_path = out_path or f"competition_eval_{kind}{suffix}.csv"
     write_csv(records, csv_path)
-    if mdp == "navigation-v5":
+    if mdp in {"navigation-v5", "navigation-transfer"}:
         # Preserve the inference algorithm as well as the policy checkpoint so
         # actor-only ablations cannot be confused with search-enabled results.
         settings = {
             "mdp": mdp, "model": str(model_path), "seed": SEED,
-            "n_scenarios": n_episodes, "n_agents": n_agents,
+            "n_scenarios": n_episodes, "n_agents": 1 if kind == "sa" else n_agents,
+            "environment_kind": kind,
             "lookahead_enabled": not no_lookahead,
             "lookahead_preset": lookahead_preset or "saved",
             "evaluation_wall_seconds": evaluation_seconds,
-            "lookahead_config": asdict(act.lookahead_config),
+            "lookahead_config": asdict(act.lookahead_config) if hasattr(act, "lookahead_config") and not no_lookahead else None,
             **policy_reward_kwargs(act, mdp),
         }
         Path(csv_path).with_suffix(".settings.json").write_text(
@@ -408,20 +475,20 @@ def main():
     parser.add_argument("--n-agents", type=int, default=N_AGENTS_MA,
                         help=f"agents for the multi-agent env (fixed: {N_AGENTS_MA})")
     parser.add_argument("--model", default=None, help="trained model path (see load_policy)")
-    parser.add_argument("--mdp", choices=["base", "navigation", "navigation-v2", "navigation-v3", "navigation-v4", "navigation-v5"], default="base",
+    parser.add_argument("--mdp", choices=["base", "navigation", "navigation-v2", "navigation-v3", "navigation-v4", "navigation-v5", "navigation-transfer"], default="base",
                         help="observation/reward/action design used to train the model")
     parser.add_argument("--out", default=None, help="per-episode CSV output path")
     inference = parser.add_mutually_exclusive_group()
     inference.add_argument("--no-lookahead", dest="no_lookahead", action="store_true", default=None,
                            help="evaluate the learned actor alone; default follows checkpoint")
     inference.add_argument("--with-lookahead", dest="no_lookahead", action="store_false",
-                           help="explicitly enable v5 search, including for a distilled actor")
+                           help="enable v5 search or single-agent navigation-transfer search")
     parser.add_argument("--lookahead-preset", choices=["saved", "fast"], default="saved",
                         help="saved settings or fast: 12 simulations, depth 3, one pass; explicit overrides win")
     parser.add_argument("--lookahead-simulations", type=int, default=None,
-                        help="v5 simulation budget per aircraft decision (overrides preset)")
+                        help="simulation budget per aircraft decision (overrides preset)")
     parser.add_argument("--lookahead-depth", type=int, default=None,
-                        help="v5 maximum tree depth (overrides preset)")
+                        help="maximum tree depth (overrides preset)")
     parser.add_argument("--lookahead-passes", type=int, choices=[1, 2], default=None,
                         help="v5 passes sharing the saved total simulation budget")
     parser.add_argument("--safety-filter", action=argparse.BooleanOptionalAction, default=None,
